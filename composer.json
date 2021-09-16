@@ -1,0 +1,21 @@
+{
+    "name": "mehulgohil/updatesync",
+    "description": "UpdateSync will help developers provide automatic updates to their WordPress plugins using GitHub.",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Mehul Gohil",
+            "email": "hello@mehulgohil.com"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {
+        "php": ">=7.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "UpdateSync": "src/"
+        }
+    }
+}
