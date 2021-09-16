@@ -1,6 +1,7 @@
 {
     "name": "mehulgohil/updatesync",
     "description": "UpdateSync will help developers provide automatic updates to their WordPress plugins using GitHub.",
+	"version": "1.0.0",
     "type": "library",
     "license": "MIT",
     "authors": [
