@@ -206,7 +206,7 @@ class UpdateSync {
 			}
 
 			// Setup transient data.
-			$transient_data                     = new stdClass();
+			$transient_data                     = new \stdClass();
 			$transient_data->slug               = $this->slug;
 			$transient_data->new_version        = $this->api_response->tag_name;
 			$transient_data->url                = $this->data['PluginURI'];
