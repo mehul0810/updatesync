@@ -100,21 +100,33 @@ class UpdateSync {
 	/**
 	 * Constructor for UpdateSync class.
 	 *
-	 * @param string $file_path    File path of the plugin.
-	 * @param string $username     GitHub Username.
-	 * @param string $repo         Github Repository.
-	 * @param string $access_token GitHub Access Token.
+	 * @param array $args List of arguments.
 	 *
 	 * @since  1.0.0
 	 * @access public
 	 *
 	 * @return void
 	 */
-	public function __construct( $file_path, $username, $repo, $access_token = '' ) {
-		$this->file_path    = $file_path;
-		$this->username     = $username;
-		$this->repo         = $repo;
-		$this->access_token = $access_token;
+	public function __construct( $args ) {
+		$defaults = [
+			'file'    => '',
+			'slug'    => '',
+			'version' => '',
+			'github'  => [
+				'username'     => '',
+				'repository'   => '',
+				'access_token' => '',
+			],
+		];
+
+		$args = wp_parse_args( $args, $defaults );
+
+		$this->file_path    = $args['file'];
+		$this->username     = $args['github']['username'];
+		$this->repo         = $args['github']['repository'];
+		$this->access_token = $args['github']['access_token'];
+		$this->slug         = plugin_basename( $this->file_path );
+		$this->version      = $args['version'];
 
 		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'set_plugin_transient' ] );
 		add_filter( 'plugins_api', [ $this, 'set_plugin_information' ], 10, 3 );
@@ -130,7 +142,6 @@ class UpdateSync {
 	 * @return void
 	 */
 	private function init_plugin_data():void {
-		$this->slug = plugin_basename( $this->file_path );
 		$this->data = get_plugin_data( $this->file_path );
 	}
 
@@ -170,6 +181,42 @@ class UpdateSync {
 	}
 
 	/**
+	 * Check for updates.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return bool|object
+	 */
+	public function check_for_updates() {
+		$update = false;
+
+		// Get plugin data and GitHub release information.
+		$this->init_plugin_data();
+		$this->get_release_information();
+
+		$can_update = version_compare( $this->api_response->tag_name, $this->version, '>' );
+
+		if ( $can_update ) {
+			$update = (object) array(
+				'slug'          => $this->slug,
+				'plugin'        => $this->slug,
+				'new_version'   => $this->api_response->tag_name,
+				'url'           => '',
+				'package'       => $this->api_response->zipball_url,
+				'icons'         => array(),
+				'banners'       => array(),
+				'banners_rtl'   => array(),
+				'tested'        => '',
+				'requires_php'  => '',
+				'compatibility' => new \stdClass(),
+			);
+		}
+
+		return $update;
+	}
+
+	/**
 	 * Store latest plugin version information in transient.
 	 *
 	 * @param object $transient Transient details.
@@ -179,39 +226,30 @@ class UpdateSync {
 	 *
 	 * @return object
 	 */
-	public function set_plugin_transient( object $transient ):object {
-		// Check whether the transient is checked or not.
-		if ( empty( $transient->checked ) ) {
-			return $transient;
-		}
+	public function set_plugin_transient( $transient ) {
+		$update = $this->check_for_updates();
 
-		// Get plugin data and GitHub release information.
-		$this->init_plugin_data();
-		$this->get_release_information();
-
-		// Check the versions if we need to do an update
-		$can_update = version_compare( $this->api_response->tag_name, $transient->checked[$this->slug] );
-
-		if ( $can_update ) {
-			$package = $this->api_response->zipball_url;
-
-			// For private repository, we need access token to fetch data from GitHub.
-			if ( ! empty( $this->access_token ) ) {
-				$package = add_query_arg(
-					[
-						'access_token' => $this->access_token,
-					],
-					$package
-				);
-			}
-
-			// Setup transient data.
-			$transient_data                     = new \stdClass();
-			$transient_data->slug               = $this->slug;
-			$transient_data->new_version        = $this->api_response->tag_name;
-			$transient_data->url                = $this->data['PluginURI'];
-			$transient_data->package            = $package;
-			$transient->response[ $this->slug ] = $transient_data;
+		if ( $update ) {
+			// Update is available.
+			$transient->response[ $this->slug ] = $update;
+		} else {
+			// No update is available.
+			$item = (object) array(
+				'slug'          => $this->slug,
+				'plugin'        => $this->slug,
+				'new_version'   => $this->api_response->tag_name,
+				'url'           => '',
+				'package'       => '',
+				'icons'         => array(),
+				'banners'       => array(),
+				'banners_rtl'   => array(),
+				'tested'        => '',
+				'requires_php'  => '',
+				'compatibility' => new \stdClass(),
+			);
+			// Adding the "mock" item to the `no_update` property is required
+			// for the enable/disable auto-updates links to correctly appear in UI.
+			$transient->no_update[ $this->slug ] = $item;
 		}
 
 		return $transient;
@@ -220,7 +258,7 @@ class UpdateSync {
 	/**
 	 * Set plugin information to view plugin details.
 	 *
-	 * @param bool   $false    Plugin Information.
+	 * @param bool   $data     Plugin response data.
 	 * @param string $action   Action.
 	 * @param object $response Response.
 	 *
@@ -229,23 +267,34 @@ class UpdateSync {
 	 *
 	 * @return object
 	 */
-	public function set_plugin_information( $false, $action, $response ): object {
+	public function set_plugin_information( $data, $action, $response ) {
+		// Bailout, if `action` is not `plugin_information`.
+		if ( 'plugin_information' !== $action ) {
+			return $data;
+		}
+
+		// Bailout, if the plugin slug doesn't match.
+		if (
+			! isset( $response->slug ) ||
+			$response->slug !== $this->slug
+		) {
+			return $data;
+		}
+
 		// Get plugin data & GitHub release information.
 		$this->init_plugin_data();
 		$this->get_release_information();
 
-		// Bailout, if no data.
-		if ( empty( $response->slug ) || $response->slug != $this->slug ) {
-			return false;
-		}
-
 		// Update response with our plugin information.
-		$response->last_updated = $this->api_response->published_at;
-		$response->slug         = $this->slug;
-		$response->plugin_name  = $this->data['Name'];
-		$response->version      = $this->api_response->tag_name;
-		$response->author       = $this->data['AuthorName'];
-		$response->homepage     = $this->data['PluginURI'];
+		$response->last_updated      = $this->api_response->published_at;
+		$response->slug              = $this->slug;
+		$response->name              = $this->data['Name'];
+		$response->version           = $this->api_response->tag_name;
+		$response->author            = $this->data['AuthorName'];
+		$response->homepage          = $this->data['PluginURI'];
+		$response->short_description = $this->data['Description'];
+		$response->requires_php      = $this->data['RequiresPHP'];
+		$response->requires          = $this->data['Requires'];
 
 		// Get download link from GitHub data.
 		$download_link = $this->api_response->zipball_url;
@@ -277,7 +326,7 @@ class UpdateSync {
 	 *
 	 * @return array
 	 */
-	public function post_install( $true, $hook_extra, array $result ):array {
+	public function post_install( $true, $hook_extra, $result ) {
 		global $wp_filesystem;
 
 		// Get plugin data.
