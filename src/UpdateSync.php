@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
  *
  * @since 1.0.0
  */
-class Updater {
+class UpdateSync {
 	/**
 	 * Plugin Slug.
 	 *
