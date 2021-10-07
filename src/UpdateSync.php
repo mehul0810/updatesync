@@ -98,6 +98,16 @@ class UpdateSync {
 	private $access_token;
 
 	/**
+	 * Plugin Version.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @var $version
+	 */
+	public $version;
+
+	/**
 	 * Constructor for UpdateSync class.
 	 *
 	 * @param array $args List of arguments.
@@ -164,56 +174,25 @@ class UpdateSync {
 
 		// For private repository, we need access token to fetch data from GitHub.
 		if ( ! empty( $this->access_token ) ) {
-			$url = add_query_arg(
+			$response = wp_remote_get(
+				$url,
 				[
-					'access_token' => $this->access_token,
-				],
-				$url
+					'headers' => [
+						'Accept'        => 'application/vnd.github.v3+json',
+						'Authorization' => "token {$this->access_token}",
+					],
+				]
 			);
+
+		} else {
+			$response = wp_remote_get( $url );
 		}
 
-		$response      = wp_remote_get( $url );
 		$response_code = wp_remote_retrieve_response_code( $response );
 
 		if ( 200 === $response_code ) {
 			$this->api_response = json_decode( wp_remote_retrieve_body( $response ) );
 		}
-	}
-
-	/**
-	 * Check for updates.
-	 *
-	 * @since  1.0.0
-	 * @access public
-	 *
-	 * @return bool|object
-	 */
-	public function check_for_updates() {
-		$update = false;
-
-		// Get plugin data and GitHub release information.
-		$this->init_plugin_data();
-		$this->get_release_information();
-
-		$can_update = version_compare( $this->api_response->tag_name, $this->version, '>' );
-
-		if ( $can_update ) {
-			$update = (object) array(
-				'slug'          => $this->slug,
-				'plugin'        => $this->slug,
-				'new_version'   => $this->api_response->tag_name,
-				'url'           => '',
-				'package'       => $this->api_response->zipball_url,
-				'icons'         => array(),
-				'banners'       => array(),
-				'banners_rtl'   => array(),
-				'tested'        => '',
-				'requires_php'  => '',
-				'compatibility' => new \stdClass(),
-			);
-		}
-
-		return $update;
 	}
 
 	/**
@@ -227,29 +206,30 @@ class UpdateSync {
 	 * @return object
 	 */
 	public function set_plugin_transient( $transient ) {
-		$update = $this->check_for_updates();
 
-		if ( $update ) {
-			// Update is available.
-			$transient->response[ $this->slug ] = $update;
-		} else {
-			// No update is available.
-			$item = (object) array(
-				'slug'          => $this->slug,
-				'plugin'        => $this->slug,
-				'new_version'   => $this->api_response->tag_name,
-				'url'           => '',
-				'package'       => '',
-				'icons'         => array(),
-				'banners'       => array(),
-				'banners_rtl'   => array(),
-				'tested'        => '',
-				'requires_php'  => '',
-				'compatibility' => new \stdClass(),
-			);
-			// Adding the "mock" item to the `no_update` property is required
-			// for the enable/disable auto-updates links to correctly appear in UI.
-			$transient->no_update[ $this->slug ] = $item;
+		if ( empty( $transient->checked ) ) {
+			return $transient;
+		}
+
+		// Get plugin data and GitHub release information.
+		$this->init_plugin_data();
+		$this->get_release_information();
+
+		if(
+			$this->api_response &&
+			version_compare( $this->version, $this->api_response->tag_name, '<' )
+			// version_compare( $this->api_response->requires, get_bloginfo( 'version' ), '<' ) &&
+			// version_compare( $this->api_response->requires_php, PHP_VERSION, '<' )
+		) {
+
+			$response              = new \stdClass();
+			$response->slug        = $this->slug;
+			$response->plugin      = $this->slug;
+			$response->new_version = $this->api_response->tag_name;
+			$response->tested      = $this->api_response->tested;
+			$response->package     = $this->api_response->download_url;
+
+			$transient->response[ $this->slug ] = $response;
 		}
 
 		return $transient;
@@ -300,14 +280,14 @@ class UpdateSync {
 		$download_link = $this->api_response->zipball_url;
 
 		// For private repository, we need access token to fetch data from GitHub.
-		if ( ! empty( $this->access_token ) ) {
-			$download_link = add_query_arg(
-				[
-					'access_token' => $this->access_token,
-				],
-				$download_link
-			);
-		}
+		// if ( ! empty( $this->access_token ) ) {
+		// 	$download_link = add_query_arg(
+		// 		[
+		// 			'access_token' => $this->access_token,
+		// 		],
+		// 		$download_link
+		// 	);
+		// }
 
 		$response->download_link = $download_link;
 
