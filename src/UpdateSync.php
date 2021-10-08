@@ -248,7 +248,9 @@ class UpdateSync {
 			$response->slug        = $this->slug;
 			$response->plugin      = $this->file_path;
 			$response->new_version = $this->api_response->tag_name;
-			$response->package     = $this->get_download_file( $this->api_response->assets[0]->id, $this->api_response->assets[0]->name );
+			$response->package     = $this->can_update ?
+				$this->get_download_file( $this->api_response->assets[0]->id, $this->api_response->assets[0]->name ) :
+				'';
 
 			$transient->response[ $this->file_path ] = $response;
 		}
