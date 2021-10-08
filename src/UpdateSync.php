@@ -66,9 +66,19 @@ class UpdateSync {
 	private $repo;
 
 	/**
-	 * File path of the plugin.
+	 * File of the plugin.
 	 *
 	 * Use `__FILE__` path of the plugin.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @var $file
+	 */
+	private $file;
+
+	/**
+	 * File path of the plugin.
 	 *
 	 * @since  1.0.0
 	 * @access public
@@ -101,11 +111,21 @@ class UpdateSync {
 	 * Plugin Version.
 	 *
 	 * @since  1.0.0
-	 * @access public
+	 * @access private
 	 *
 	 * @var $version
 	 */
-	public $version;
+	private $version;
+
+	/**
+	 * Can Update?
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $can_update
+	 */
+	private $can_update;
 
 	/**
 	 * Constructor for UpdateSync class.
@@ -119,24 +139,27 @@ class UpdateSync {
 	 */
 	public function __construct( $args ) {
 		$defaults = [
-			'file'    => '',
-			'slug'    => '',
-			'version' => '',
-			'github'  => [
+			'file'       => '',
+			'slug'       => '',
+			'version'    => '',
+			'github'     => [
 				'username'     => '',
 				'repository'   => '',
 				'access_token' => '',
 			],
+			'can_update' => false,
 		];
 
 		$args = wp_parse_args( $args, $defaults );
 
-		$this->file_path    = $args['file'];
+		$this->file         = $args['file'];
 		$this->username     = $args['github']['username'];
 		$this->repo         = $args['github']['repository'];
 		$this->access_token = $args['github']['access_token'];
-		$this->slug         = plugin_basename( $this->file_path );
+		$this->file_path    = plugin_basename( $this->file );
+		$this->slug         = $args['slug'];
 		$this->version      = $args['version'];
+		$this->can_update   = $args['can_update'];
 
 		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'set_plugin_transient' ] );
 		add_filter( 'plugins_api', [ $this, 'set_plugin_information' ], 10, 3 );
@@ -152,7 +175,7 @@ class UpdateSync {
 	 * @return void
 	 */
 	private function init_plugin_data():void {
-		$this->data = get_plugin_data( $this->file_path );
+		$this->data = get_plugin_data( $this->file );
 	}
 
 	/**
@@ -221,15 +244,13 @@ class UpdateSync {
 			// version_compare( $this->api_response->requires, get_bloginfo( 'version' ), '<' ) &&
 			// version_compare( $this->api_response->requires_php, PHP_VERSION, '<' )
 		) {
-
 			$response              = new \stdClass();
 			$response->slug        = $this->slug;
-			$response->plugin      = $this->slug;
+			$response->plugin      = $this->file_path;
 			$response->new_version = $this->api_response->tag_name;
-			$response->tested      = $this->api_response->tested;
-			$response->package     = $this->api_response->download_url;
+			$response->package     = $this->get_download_file( $this->api_response->assets[0]->id, $this->api_response->assets[0]->name );
 
-			$transient->response[ $this->slug ] = $response;
+			$transient->response[ $this->file_path ] = $response;
 		}
 
 		return $transient;
@@ -256,7 +277,7 @@ class UpdateSync {
 		// Bailout, if the plugin slug doesn't match.
 		if (
 			! isset( $response->slug ) ||
-			$response->slug !== $this->slug
+			$response->slug !== $this->file_path
 		) {
 			return $data;
 		}
@@ -275,21 +296,6 @@ class UpdateSync {
 		$response->short_description = $this->data['Description'];
 		$response->requires_php      = $this->data['RequiresPHP'];
 		$response->requires          = $this->data['Requires'];
-
-		// Get download link from GitHub data.
-		$download_link = $this->api_response->zipball_url;
-
-		// For private repository, we need access token to fetch data from GitHub.
-		// if ( ! empty( $this->access_token ) ) {
-		// 	$download_link = add_query_arg(
-		// 		[
-		// 			'access_token' => $this->access_token,
-		// 		],
-		// 		$download_link
-		// 	);
-		// }
-
-		$response->download_link = $download_link;
 
 		return $response;
 	}
@@ -313,10 +319,10 @@ class UpdateSync {
 		$this->init_plugin_data();
 
 		// Check if the plugin was previously activated.
-		$was_activated = is_plugin_active( $this->slug );
+		$was_activated = is_plugin_active( $this->file_path );
 
 		// Get plugin directory.
-		$plugin_dir = WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . dirname( $this->slug );
+		$plugin_dir = WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . dirname( $this->file_path );
 
 		// Move plugin ZIP to destination.
 		$wp_filesystem->move( $result['destination'], $plugin_dir );
@@ -324,9 +330,53 @@ class UpdateSync {
 
 		// Re-activate plugin, if required.
 		if ( $was_activated ) {
-			activate_plugin( $this->slug );
+			activate_plugin( $this->file_path );
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Get Download File.
+	 *
+	 * @param string $id   Asset ID.
+	 * @param string $name Asset Name.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return string
+	 */
+	public function get_download_file( $id, $name ):string {
+		$creds = request_filesystem_credentials( admin_url(), '', false, false, array() );
+
+		// Bailout, if no access to file system.
+		if ( ! WP_Filesystem( $creds ) ) {
+			return false;
+		}
+
+		global $wp_filesystem;
+
+		$url      = "https://api.github.com/repos/{$this->username}/{$this->repo}/releases/assets/{$id}";
+		$response = wp_remote_get(
+			$url,
+			[
+				'headers' => [
+					'Authorization' => "token {$this->access_token}",
+					'Accept'        => 'application/octet-stream',
+				],
+			]
+		);
+
+		$response_body = wp_remote_retrieve_body( $response );
+		$response_code = wp_remote_retrieve_response_code( $response );
+
+		if ( 200 === $response_code && ! is_wp_error( $response_body ) ) {
+			$file = wp_upload_bits( $name, null, $response_body );
+
+			return ! empty( $file['url'] ) ? $file['url'] : '';
+		}
+
+		return '';
 	}
 }
