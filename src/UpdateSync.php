@@ -350,15 +350,6 @@ class UpdateSync {
 	 * @return string
 	 */
 	public function get_download_file( $id, $name ):string {
-		$creds = request_filesystem_credentials( admin_url(), '', false, false, array() );
-
-		// Bailout, if no access to file system.
-		if ( ! WP_Filesystem( $creds ) ) {
-			return false;
-		}
-
-		global $wp_filesystem;
-
 		$url      = "https://api.github.com/repos/{$this->username}/{$this->repo}/releases/assets/{$id}";
 		$response = wp_remote_get(
 			$url,
