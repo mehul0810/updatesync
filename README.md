@@ -1,6 +1,6 @@
 # UpdateSync
 
-**UpdateSync is a composer package to help developers to integrate within their WordPress plugin to simplify their automatic updates directly from their code hosting providers repository.
+**UpdateSync** is a composer package to help developers to integrate within their WordPress plugin to simplify their automatic updates directly from their code hosting providers repository.
 
 ## Overview
 
