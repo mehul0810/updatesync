@@ -1,4 +1,28 @@
 <?php
+declare(strict_types=1);
+
+/**
+ * AbstractProvider
+ *
+ * Contains common functionality for update providers.
+ *
+ * @package MG\UpdateSync
+ */
+
+namespace MG\UpdateSync;
+
+if ( ! defined( 'WPINC' ) ) {
+    die;
+}
+
+/**
+ * Abstract class for update providers.
+ */
+abstract class AbstractProvider implements ProviderInterface {
+
+    <?php
+declare(strict_types=1);
+
 /**
  * AbstractProvider
  *
@@ -40,14 +64,19 @@ abstract class AbstractProvider implements ProviderInterface {
     protected string $local_version;
 
     /**
-     * Object containing API update data.
+     * Standardized API update data.
+     *
+     * Expected properties:
+     * - version: (string) latest version number
+     * - download_link: (string) URL to download the release zip file
+     * - tested, requires, requires_php, slug, etc.
      *
      * @var \stdClass
      */
     protected \stdClass $api_data;
 
     /**
-     * Update server URL.
+     * Update server URL taken from the plugin header.
      *
      * @var string|null
      */
@@ -56,7 +85,7 @@ abstract class AbstractProvider implements ProviderInterface {
     /**
      * Constructor.
      *
-     * Initializes file path, slug, and update server details by reading file headers.
+     * Reads file header data to determine the plugin slug, local version, and update server.
      *
      * @param string $file_path Absolute file path of plugin/theme.
      */
@@ -81,14 +110,14 @@ abstract class AbstractProvider implements ProviderInterface {
             ]
         );
 
-        $this->local_version = $file_data['Version'];
-        $this->update_server = $file_data['UpdateURI'];
+        $this->local_version = $file_data['Version'] ?? '';
+        $this->update_server = $file_data['UpdateURI'] ?? null;
     }
 
     /**
      * Runs the update process.
      *
-     * Checks page context, validates the update server, fetches API data, and loads hooks.
+     * Checks for a new release and loads WordPress update hooks if needed.
      *
      * @return void|\WP_Error
      */
@@ -124,8 +153,7 @@ abstract class AbstractProvider implements ProviderInterface {
         $pages            = [ 'update-core.php', 'update.php', 'plugins.php', 'themes.php' ];
         $view_details     = [ 'plugin-install.php', 'theme-install.php' ];
         $autoupdate_pages = [ 'admin-ajax.php', 'index.php', 'wp-cron.php' ];
-        $allowed = array_merge( $pages, $view_details, $autoupdate_pages );
-        return in_array( $pagenow, $allowed, true );
+        return in_array( $pagenow, array_merge( $pages, $view_details, $autoupdate_pages ), true );
     }
 
     /**
@@ -135,57 +163,49 @@ abstract class AbstractProvider implements ProviderInterface {
      */
     protected function validateUpdateServer(): ?\WP_Error {
         if ( null === $this->update_server ) {
-            return new \WP_Error( 'no_domain', 'No update server domain' );
+            return new \WP_Error( 'no_domain', 'No update server domain provided in plugin header' );
         }
         return null;
     }
 
     /**
-     * Fetches update data from the remote update server.
+     * Fetches update data from the provider’s API.
      *
-     * Retrieves a transient-cached response or makes a remote request if necessary.
+     * Accepts additional options (e.g., custom headers) that can be supplied by providers.
      *
+     * @param array $options Optional arguments for wp_remote_get.
      * @return \WP_Error|null Returns a WP_Error on failure; otherwise null.
      */
-    protected function fetchApiData(): ?\WP_Error {
+    protected function fetchApiData(array $options = []): ?\WP_Error {
         $url = $this->getApiUrl();
         $transient_key = "updatesync_{$this->file}";
-
-        // Attempt to get cached API data.
-        $response = get_site_transient( $transient_key );
-        if ( ! $response ) {
-            $response = wp_remote_post( $url );
-            if ( is_wp_error( $response ) ) {
-                return $response;
+        $cached = get_site_transient( $transient_key );
+        if ( ! $cached ) {
+            $raw = wp_remote_get( $url, $options );
+            if ( is_wp_error( $raw ) ) {
+                return $raw;
             }
-
-            $decoded = json_decode( wp_remote_retrieve_body( $response ), true );
-            if ( null === $decoded || empty( $decoded ) || isset( $decoded['error'] ) ) {
-                return new \WP_Error( 'non_json_api_response', 'Poorly formed JSON', $response );
+            $body = wp_remote_retrieve_body( $raw );
+            $decoded = json_decode( $body, true );
+            if ( null === $decoded || empty( $decoded ) ) {
+                return new \WP_Error( 'non_json_api_response', 'Poorly formed JSON from API', $raw );
             }
-
-            $this->api_data = (object) $decoded;
-            $this->api_data->file = $this->file;
-
-            // Cache the API response for 5 minutes.
+            // Process the raw API response into a standardized format.
+            $this->processApiData( $decoded );
             set_site_transient( $transient_key, $this->api_data, 5 * \MINUTE_IN_SECONDS );
         } else {
-            if ( isset( $response->error ) ) {
-                return new \WP_Error( 'repo-no-exist', 'Specified repo does not exist' );
-            }
-            $this->api_data = $response;
+            $this->api_data = $cached;
         }
-
         return null;
     }
 
     /**
-     * Registers all necessary hooks for the update process.
+     * Registers necessary WordPress hooks to inject update information.
      *
      * @return void
      */
     public function loadHooks(): void {
-        $type = $this->api_data->type;
+        $type = $this->api_data->type ?? 'plugin';
 
         add_filter( 'upgrader_source_selection', [ $this, 'upgraderSourceSelection' ], 10, 4 );
         add_filter( "{$type}s_api", [ $this, 'repoApiDetails' ], 99, 3 );
@@ -446,9 +466,23 @@ abstract class AbstractProvider implements ProviderInterface {
     }
 
     /**
-     * Returns the API URL specific to the provider.
+     * Returns the API URL for the provider.
      *
      * @return string
      */
     abstract protected function getApiUrl(): string;
+
+    /**
+     * Processes the raw API response data and populates $this->api_data
+     * in a standardized structure for UpdateSync.
+     *
+     * Expected standardized properties:
+     * - version
+     * - download_link
+     * - tested, requires, requires_php, slug, etc.
+     *
+     * @param array $data Raw API response.
+     * @return void
+     */
+    abstract protected function processApiData(array $data): void;
 }
