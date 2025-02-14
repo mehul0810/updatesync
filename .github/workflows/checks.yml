@@ -24,7 +24,7 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-suggest
 
       - name: Run PHP Code Sniffer
-        run: vendor/bin/phpcs --standard=WordPress
+        run: composer run phpcs
 
   phpstan:
     name: PHPStan Analysis
@@ -43,7 +43,7 @@ jobs:
         run: composer install --prefer-dist --no-progress --no-suggest
 
       - name: Run PHPStan
-        run: vendor/bin/phpstan analyse --level=max src
+        run: composer run phpstan
 
   security-check:
     name: Composer Security Audit
