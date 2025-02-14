@@ -20,28 +20,6 @@ if ( ! defined( 'WPINC' ) ) {
  */
 abstract class AbstractProvider implements ProviderInterface {
 
-    <?php
-declare(strict_types=1);
-
-/**
- * AbstractProvider
- *
- * Contains common functionality for update providers.
- *
- * @package MG\UpdateSync
- */
-
-namespace MG\UpdateSync;
-
-if ( ! defined( 'WPINC' ) ) {
-    die;
-}
-
-/**
- * Abstract class for update providers.
- */
-abstract class AbstractProvider implements ProviderInterface {
-
     /**
      * File path relative to the plugin/theme.
      *
