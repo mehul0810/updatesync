@@ -264,47 +264,31 @@ abstract class AbstractProvider implements ProviderInterface {
      * @param \stdClass $transient Update transient object.
      * @return \stdClass Updated transient.
      */
-    public function updateSiteTransient( $transient ): \stdClass {
-        if ( ! is_object( $transient ) ) {
+    public function updateSiteTransient($transient): \stdClass {
+        if (!is_object($transient)) {
             $transient = new \stdClass();
         }
-
+    
         $response = [
-            'slug'                => $this->api_data->slug,
-            $this->api_data->type => ( 'theme' === $this->api_data->type ) ? $this->api_data->slug : $this->api_data->file,
-            'url'                 => $this->api_data->url ?? $this->api_data->slug,
-            'icons'               => (array) $this->api_data->icons,
-            'banners'             => $this->api_data->banners,
-            'branch'              => $this->api_data->branch,
-            'type'                => "{$this->api_data->git}-{$this->api_data->type}",
-            'update-supported'    => true,
-            'requires'            => $this->api_data->requires,
-            'requires_php'        => $this->api_data->requires_php,
+            'slug'      => $this->api_data->slug,
+            // Use the plugin file as the key for plugin updates.
+            $this->api_data->type => ('plugin' === $this->api_data->type) ? $this->api_data->plugin : $this->api_data->slug,
+            'url'       => $this->api_data->url ?? $this->api_data->slug,
+            'package'   => $this->api_data->download_link,
+            'tested'    => $this->api_data->tested,
+            'requires'  => $this->api_data->requires,
+            'requires_php' => $this->api_data->requires_php,
+            // Optionally combine the provider with the type:
+            'type'      => "{$this->api_data->git}-{$this->api_data->type}",
         ];
-
-        if ( 'theme' === $this->api_data->type ) {
-            $response['theme_uri'] = $response['url'];
-        }
-
-        if ( version_compare( $this->api_data->version, $this->local_version, '>' ) ) {
-            $response_api_checked = [
-                'new_version'  => $this->api_data->version,
-                'package'      => $this->api_data->download_link,
-                'tested'       => $this->api_data->tested,
-                'requires'     => $this->api_data->requires,
-                'requires_php' => $this->api_data->requires_php,
-            ];
-            $response = array_merge( $response, $response_api_checked );
-            $response = 'plugin' === $this->api_data->type ? (object) $response : $response;
-            $key      = 'plugin' === $this->api_data->type ? $this->api_data->file : $this->api_data->slug;
-            $transient->response[ $key ] = $response;
-        } else {
-            $response = 'plugin' === $this->api_data->type ? (object) $response : $response;
-            $transient->no_update[ $this->api_data->file ] = $response;
-        }
-
+    
+        // For plugins, add the update information under the plugin file key.
+        $key = $this->api_data->plugin;
+        $transient->response[$key] = (object)$response;
+    
         return $transient;
     }
+    
 
     /**
      * Adds authentication headers to the download request.
