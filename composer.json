@@ -1,22 +1,22 @@
 {
-    "name": "mehulgohil/updatesync",
-    "description": "UpdateSync will help developers provide automatic updates to their WordPress plugins using GitHub.",
-	"version": "1.0.0",
-    "type": "library",
-    "license": "MIT",
+    "name": "mehul0810/updatesync",
+    "description": "UpdateSync is a composer package to help developers provide automatic updates to their WordPress plugins and themes using GitHub.",
+    "type": "wordpress-plugin",
+    "license": "GPL-3.0-or-later",
+    "require": {
+        "php": ">=8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "MG\\UpdateSync\\": "src/"
+        }
+    },
     "authors": [
         {
             "name": "Mehul Gohil",
             "email": "hello@mehulgohil.com"
         }
     ],
-    "minimum-stability": "stable",
-    "require": {
-        "php": ">=7.0.0"
-    },
-    "autoload": {
-        "psr-4": {
-            "UpdateSync\\": "src/"
-        }
-    }
+    "homepage": "https://github.com/mehul0810/updatesync"
 }
+
