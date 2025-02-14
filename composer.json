@@ -35,5 +35,10 @@
                 "vendor/wp-coding-standards/wpcs"
             ]
         }
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
     }
 }
