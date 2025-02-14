@@ -270,25 +270,24 @@ abstract class AbstractProvider implements ProviderInterface {
         }
     
         $response = [
-            'slug'      => $this->api_data->slug,
-            // Use the plugin file as the key for plugin updates.
-            $this->api_data->type => ('plugin' === $this->api_data->type) ? $this->api_data->plugin : $this->api_data->slug,
-            'url'       => $this->api_data->url ?? $this->api_data->slug,
-            'package'   => $this->api_data->download_link,
-            'tested'    => $this->api_data->tested,
-            'requires'  => $this->api_data->requires,
+            'slug'         => $this->api_data->slug,
+            // Use the plugin file as the identifier for plugin updates.
+            'plugin'       => $this->api_data->plugin,
+            'new_version'  => $this->api_data->version,
+            'url'          => $this->update_server,  // Or use a custom URL if needed.
+            'package'      => $this->api_data->download_link,
+            'tested'       => $this->api_data->tested,
+            'requires'     => $this->api_data->requires,
             'requires_php' => $this->api_data->requires_php,
-            // Optionally combine the provider with the type:
-            'type'      => "{$this->api_data->git}-{$this->api_data->type}",
+            // Combine provider and type, e.g. "github-plugin".
+            'type'         => "{$this->api_data->git}-{$this->api_data->type}",
+            'update-supported' => $this->api_data->{'update-supported'} ?? true,
         ];
     
-        // For plugins, add the update information under the plugin file key.
-        $key = $this->api_data->plugin;
+        $key = $this->api_data->plugin;  // This should be like "example-plugin/example-plugin.php"
         $transient->response[$key] = (object)$response;
-    
         return $transient;
     }
-    
 
     /**
      * Adds authentication headers to the download request.

@@ -28,17 +28,19 @@ final class GitHub extends AbstractProvider {
     /**
      * Processes the raw GitHub API response into a standardized format.
      *
+     * This ensures the update object includes all required properties.
+     *
      * @param array $data Raw JSON response from GitHub.
      * @return void
      */
     protected function processApiData(array $data): void {
         $standard = new \stdClass();
 
-        // Remove a leading "v" from tag name if present.
+        // Remove a leading "v" from the tag name if present.
         $version = ltrim($data['tag_name'] ?? '', 'v');
         $standard->version = $version;
 
-        // Determine the download link.
+        // Use an asset's download URL if available; otherwise fallback to the zipball URL.
         if (!empty($data['assets']) && is_array($data['assets'])) {
             $asset = reset($data['assets']);
             $standard->download_link = $asset['browser_download_url'] ?? $data['zipball_url'];
@@ -46,20 +48,21 @@ final class GitHub extends AbstractProvider {
             $standard->download_link = $data['zipball_url'] ?? '';
         }
 
-        // Set additional standardized fields.
-        $standard->tested         = $version;   // Adjust as needed.
-        $standard->requires       = '';         // Add if needed.
-        $standard->requires_php   = '';         // Add if needed.
-        $standard->slug           = $this->slug;
-
-        // Crucial: Set the plugin file so WordPress knows which plugin to update.
-        $standard->plugin         = $this->file;
+        // Additional standardized fields.
+        $standard->tested       = $version;  // You can adjust this if needed.
+        $standard->requires     = '';        // Optionally specify.
+        $standard->requires_php = '';        // Optionally specify.
+        $standard->slug         = $this->slug;
         
-        // Set the provider identifier.
-        $standard->git            = 'github';
+        // IMPORTANT: Set the plugin file from the constructor.
+        $standard->plugin = $this->file;
         
-        // Define type as "plugin".
-        $standard->type           = 'plugin';
+        // Provider identifier for building the update "type".
+        $standard->git  = 'github';
+        $standard->type = 'plugin';
+        
+        // Flag that automatic updates are supported.
+        $standard->{'update-supported'} = true;
 
         $this->api_data = $standard;
     }
