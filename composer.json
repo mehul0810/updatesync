@@ -14,7 +14,7 @@
     },
     "autoload": {
         "psr-4": {
-            "MG\\UpdateSync\\": "src/"
+            "UpdateSync\\": "src/"
         }
     },
     "authors": [
