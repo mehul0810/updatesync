@@ -12,7 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * Provider class for automatic updates.
+ * Provider class for checking GitHub releases.
  */
 class Provider {
 
@@ -54,10 +54,10 @@ class Provider {
 	/**
 	 * Constructor.
 	 *
-	 * @param string $owner         GitHub repository owner.
-	 * @param string $repo          GitHub repository name.
-	 * @param bool   $can_update    Whether updates are allowed. Defaults to true.
-	 * @param bool   $cache         Whether caching is enabled. Defaults to true.
+	 * @param string $owner          GitHub repository owner.
+	 * @param string $repo           GitHub repository name.
+	 * @param bool   $can_update     Whether updates are allowed. Defaults to true.
+	 * @param bool   $cache          Whether caching is enabled. Defaults to true.
 	 * @param int    $cache_duration Cache duration in seconds. Defaults to 3600.
 	 */
 	public function __construct( $owner, $repo, $can_update = true, $cache = true, $cache_duration = 3600 ) {
@@ -84,7 +84,7 @@ class Provider {
 			return null;
 		}
 
-		// Add version comparison logic here if needed.
+		// You can add version comparison logic here if needed.
 		return $release_data;
 	}
 
