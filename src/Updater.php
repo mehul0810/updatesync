@@ -249,7 +249,7 @@ class Updater {
 			$response->plugin      = $this->file_path;
 			$response->new_version = $this->api_response->tag_name;
 			$response->package     = $this->can_update ?
-				$this->get_download_file( $this->api_response->assets[0]->id, $this->api_response->assets[0]->name ) :
+				$this->api_response->assets[0]->browser_download_url :
 				'';
 
 			$transient->response[ $this->file_path ] = $response;
