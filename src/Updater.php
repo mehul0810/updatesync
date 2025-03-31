@@ -1,129 +1,384 @@
 <?php
 /**
- * Plugin Update Notifier.
+ * UpdateSync | Updater class to update WordPress plugins.
  *
- * Hooks into WordPress’s update mechanism to display update notifications.
- *
+ * @since   1.0.0
  * @package UpdateSync
+ * @author  Mehul Gohil <hello@mehulgohil.com>
  */
 
 namespace UpdateSync;
 
+// Bailout, if accessed directly.
 if ( ! defined( 'ABSPATH' ) ) {
-	exit; // Exit if accessed directly.
+	return;
 }
 
 /**
- * Updater class.
+ * Class UpdateSync
+ *
+ * This updater class will handle all the automatic updates thingy
+ * for the WordPress plugins hosted via GitHub.
+ *
+ * @since 1.0.0
  */
 class Updater {
-
 	/**
-	 * Plugin file (relative to the plugins directory).
+	 * Plugin Slug.
 	 *
-	 * @var string
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $slug
 	 */
-	private $plugin_file;
+	private $slug;
 
 	/**
-	 * GitHub repository owner.
+	 * Plugin Data
 	 *
-	 * @var string
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $data
 	 */
-	private $owner;
+	private $data;
 
 	/**
-	 * GitHub repository name.
+	 * GitHub Username
 	 *
-	 * @var string
+	 * Use the GitHub username where the plugin repository is hosted.
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $username
+	 */
+	private $username;
+
+	/**
+	 * GitHub Repository Name.
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $repo
 	 */
 	private $repo;
 
 	/**
-	 * Current plugin version.
+	 * File of the plugin.
 	 *
-	 * @var string
+	 * Use `__FILE__` path of the plugin.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @var $file
 	 */
-	private $current_version;
+	private $file;
 
 	/**
-	 * Whether updates are allowed.
+	 * File path of the plugin.
 	 *
-	 * @var bool
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @var $file_path
+	 */
+	private $file_path;
+
+	/**
+	 * GitHub API Result.
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $api_response
+	 */
+	private $api_response;
+
+	/**
+	 * GitHub Access Token.
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $access_token
+	 */
+	private $access_token;
+
+	/**
+	 * Plugin Version.
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $version
+	 */
+	private $version;
+
+	/**
+	 * Can Update?
+	 *
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @var $can_update
 	 */
 	private $can_update;
 
 	/**
-	 * Whether caching is enabled.
+	 * Constructor for UpdateSync class.
 	 *
-	 * @var bool
-	 */
-	private $cache;
-
-	/**
-	 * Cache duration in seconds.
+	 * @param array $args List of arguments.
 	 *
-	 * @var int
-	 */
-	private $cache_duration;
-
-	/**
-	 * Constructor.
+	 * @since  1.0.0
+	 * @access public
 	 *
-	 * @param string $plugin_file     Plugin file relative to the plugins directory (e.g., my-plugin/my-plugin.php).
-	 * @param string $owner           GitHub repository owner.
-	 * @param string $repo            GitHub repository name.
-	 * @param string $current_version Current version of the plugin.
-	 * @param bool   $can_update      Whether updates are allowed. Defaults to true.
-	 * @param bool   $cache           Whether caching is enabled. Defaults to true.
-	 * @param int    $cache_duration  Cache duration in seconds. Defaults to 3600.
+	 * @return void
 	 */
-	public function __construct( $plugin_file, $owner, $repo, $current_version, $can_update = true, $cache = true, $cache_duration = 3600 ) {
-		$this->plugin_file     = $plugin_file;
-		$this->owner           = $owner;
-		$this->repo            = $repo;
-		$this->current_version = $current_version;
-		$this->can_update      = $can_update;
-		$this->cache           = $cache;
-		$this->cache_duration  = $cache_duration;
+	public function __construct( $args ) {
+		$defaults = [
+			'file'       => '',
+			'slug'       => '',
+			'version'    => '',
+			'github'     => [
+				'username'     => '',
+				'repository'   => '',
+				'access_token' => '',
+			],
+			'can_update' => false,
+		];
 
-		// Hook into the update mechanism.
-		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_update' ) );
+		$args = wp_parse_args( $args, $defaults );
+
+		$this->file         = $args['file'];
+		$this->username     = $args['github']['username'];
+		$this->repo         = $args['github']['repository'];
+		$this->access_token = $args['github']['access_token'];
+		$this->file_path    = plugin_basename( $this->file );
+		$this->slug         = $args['slug'];
+		$this->version      = $args['version'];
+		$this->can_update   = $args['can_update'];
+
+		add_filter( 'pre_set_site_transient_update_plugins', [ $this, 'set_plugin_transient' ] );
+		add_filter( 'plugins_api', [ $this, 'set_plugin_information' ], 10, 3 );
+		add_filter( 'upgrader_post_install', [ $this, 'post_install' ], 10, 3 );
 	}
 
 	/**
-	 * Checks for plugin updates and injects update data into the transient.
+	 * Get Installed Plugin Data.
 	 *
-	 * @param object $transient The update plugins transient.
-	 * @return object Modified update plugins transient.
+	 * @since  1.0.0
+	 * @access private
+	 *
+	 * @return void
 	 */
-	public function check_update( $transient ) {
-		// Ensure the transient contains plugin data.
+	private function init_plugin_data():void {
+		$this->data = get_plugin_data( $this->file );
+	}
+
+	/**
+	 * Get Plugin Latest Release Data from GitHub.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return void
+	 */
+	private function get_release_information():void {
+		// Make sure you fetch release information once.
+		if ( ! empty( $this->api_response ) ) {
+			return;
+		}
+
+		// GitHub API URL to fetch the latest release.
+		$url = "https://api.github.com/repos/{$this->username}/{$this->repo}/releases/latest";
+
+		// For private repository, we need access token to fetch data from GitHub.
+		if ( ! empty( $this->access_token ) ) {
+			$response = wp_remote_get(
+				$url,
+				[
+					'headers' => [
+						'Accept'        => 'application/vnd.github.v3+json',
+						'Authorization' => "token {$this->access_token}",
+					],
+				]
+			);
+
+		} else {
+			$response = wp_remote_get( $url );
+		}
+
+		$response_code = wp_remote_retrieve_response_code( $response );
+
+		if ( 200 === $response_code ) {
+			$this->api_response = json_decode( wp_remote_retrieve_body( $response ) );
+		}
+	}
+
+	/**
+	 * Store latest plugin version information in transient.
+	 *
+	 * @param object $transient Transient details.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return object
+	 */
+	public function set_plugin_transient( $transient ) {
+
 		if ( empty( $transient->checked ) ) {
 			return $transient;
 		}
 
-		$provider = new Provider( $this->owner, $this->repo, $this->can_update, $this->cache, $this->cache_duration );
-		$release  = $provider->check_for_update();
+		// Get plugin data and GitHub release information.
+		$this->init_plugin_data();
+		$this->get_release_information();
 
-		// Proceed only if a valid release is found with a tag_name.
-		if ( $release && isset( $release['tag_name'] ) ) {
-			$new_version = ltrim( $release['tag_name'], 'v' );
-			// Compare versions: if current version is less than new version, add update notification.
-			if ( version_compare( $this->current_version, $new_version, '<' ) ) {
-				$package = isset( $release['assets'][0]['browser_download_url'] ) ? $release['assets'][0]['browser_download_url'] : '';
+		if(
+			$this->api_response &&
+			version_compare( $this->version, $this->api_response->tag_name, '<' )
+			// version_compare( $this->api_response->requires, get_bloginfo( 'version' ), '<' ) &&
+			// version_compare( $this->api_response->requires_php, PHP_VERSION, '<' )
+		) {
+			$response              = new \stdClass();
+			$response->slug        = $this->slug;
+			$response->plugin      = $this->file_path;
+			$response->new_version = $this->api_response->tag_name;
+			$response->package     = $this->can_update ?
+				$this->get_download_file( $this->api_response->assets[0]->id, $this->api_response->assets[0]->name ) :
+				'';
 
-				// Inject update data into the transient.
-				$transient->response[ $this->plugin_file ] = (object) array(
-					'slug'        => dirname( $this->plugin_file ),
-					'plugin'      => $this->plugin_file,
-					'new_version' => $new_version,
-					'url'         => $release['html_url'],
-					'package'     => $package,
-				);
-			}
+			$transient->response[ $this->file_path ] = $response;
 		}
 
 		return $transient;
+	}
+
+	/**
+	 * Set plugin information to view plugin details.
+	 *
+	 * @param bool   $data     Plugin response data.
+	 * @param string $action   Action.
+	 * @param object $response Response.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return object
+	 */
+	public function set_plugin_information( $data, $action, $response ) {
+		// Bailout, if `action` is not `plugin_information`.
+		if ( 'plugin_information' !== $action ) {
+			return $data;
+		}
+
+		// Bailout, if the plugin slug doesn't match.
+		if (
+			! isset( $response->slug ) ||
+			$response->slug !== $this->file_path
+		) {
+			return $data;
+		}
+
+		// Get plugin data & GitHub release information.
+		$this->init_plugin_data();
+		$this->get_release_information();
+
+		// Update response with our plugin information.
+		$response->last_updated      = $this->api_response->published_at;
+		$response->slug              = $this->slug;
+		$response->name              = $this->data['Name'];
+		$response->version           = $this->api_response->tag_name;
+		$response->author            = $this->data['AuthorName'];
+		$response->homepage          = $this->data['PluginURI'];
+		$response->short_description = $this->data['Description'];
+		$response->requires_php      = $this->data['RequiresPHP'];
+		$response->requires          = $this->data['Requires'];
+
+		return $response;
+	}
+
+	/**
+	 * Install the plugin once the ZIP is ready.
+	 *
+	 * @param bool  $true True.
+	 * @param array $hook_extra Hook Extra.
+	 * @param array $result Response.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return array
+	 */
+	public function post_install( $true, $hook_extra, $result ) {
+		global $wp_filesystem;
+
+		// Get plugin data.
+		$this->init_plugin_data();
+
+		// Check if the plugin was previously activated.
+		$was_activated = is_plugin_active( $this->file_path );
+
+		// Get plugin directory.
+		$plugin_dir = WP_PLUGIN_DIR . DIRECTORY_SEPARATOR . dirname( $this->file_path );
+
+		// Move plugin ZIP to destination.
+		$wp_filesystem->move( $result['destination'], $plugin_dir );
+		$result['destination'] = $plugin_dir;
+
+		// Re-activate plugin, if required.
+		if ( $was_activated ) {
+			activate_plugin( $this->file_path );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Get Download File.
+	 *
+	 * @param string $id   Asset ID.
+	 * @param string $name Asset Name.
+	 *
+	 * @since  1.0.0
+	 * @access public
+	 *
+	 * @return string
+	 */
+	public function get_download_file( $id, $name ):string {
+		$creds = request_filesystem_credentials( admin_url(), '', false, false, array() );
+
+		// Bailout, if no access to file system.
+		if ( ! WP_Filesystem( $creds ) ) {
+			return false;
+		}
+
+		global $wp_filesystem;
+
+		$url      = "https://api.github.com/repos/{$this->username}/{$this->repo}/releases/assets/{$id}";
+		$response = wp_remote_get(
+			$url,
+			[
+				'headers' => [
+					'Authorization' => "token {$this->access_token}",
+					'Accept'        => 'application/octet-stream',
+				],
+			]
+		);
+
+		$response_body = wp_remote_retrieve_body( $response );
+		$response_code = wp_remote_retrieve_response_code( $response );
+
+		if ( 200 === $response_code && ! is_wp_error( $response_body ) ) {
+			$file = wp_upload_bits( $name, null, $response_body );
+
+			return ! empty( $file['url'] ) ? $file['url'] : '';
+		}
+
+		return '';
 	}
 }
