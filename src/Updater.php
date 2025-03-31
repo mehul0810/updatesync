@@ -279,7 +279,7 @@ class Updater {
 		// Bailout, if the plugin slug doesn't match.
 		if (
 			! isset( $response->slug ) ||
-			$response->slug !== $this->file_path
+			$response->slug !== $this->slug
 		) {
 			return $data;
 		}
@@ -297,8 +297,18 @@ class Updater {
 		$response->homepage          = $this->data['PluginURI'];
 		$response->short_description = $this->data['Description'];
 		$response->requires_php      = $this->data['RequiresPHP'];
-		$response->requires          = $this->data['Requires'];
+		$response->requires_wp       = $this->data['RequiresWP'];
+		$response->requires_plugins  = $this->data['RequiresPlugins'];
+		$response->sections		     = [
+			'description' => $this->data['Description'],
+			'changelog'   => $this->api_response->body,
+		];
 
+		// Add download link, if the plugin can be updated.
+		if ( $this->update ) {
+			$response->download_link = $this->api_response->assets[0]->browser_download_url;
+		}
+		
 		return $response;
 	}
 
