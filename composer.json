@@ -1,16 +1,17 @@
 {
     "name": "mehul0810/updatesync",
-    "description": "UpdateSync is a composer package to help developers provide automatic updates to their WordPress plugins and themes using GitHub.",
+    "description": "UpdateSync adds GitHub release updates to WordPress plugins.",
     "type": "wordpress-plugin",
     "license": "GPL-3.0-or-later",
     "require": {
         "php": ">=8.1"
     },
     "require-dev": {
-        "squizlabs/php_codesniffer": "^3.7",
-        "dealerdirect/phpcodesniffer-composer-installer": "^0.7.1",
-        "wp-coding-standards/wpcs": "^2.3",
-        "phpstan/phpstan": "^1.9"
+        "squizlabs/php_codesniffer": "^3.13.5",
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "wp-coding-standards/wpcs": "^3.4",
+        "phpstan/phpstan": "^2.1",
+        "php-stubs/wordpress-stubs": "^7.1"
     },
     "autoload": {
         "psr-4": {
@@ -25,9 +26,8 @@
     ],
     "homepage": "https://github.com/mehul0810/updatesync",
     "scripts": {
-        "phpcs": "vendor/bin/phpcs --standard=WordPress src/",
-        "phpstan": "vendor/bin/phpstan analyse --level=max src",
-        "audit": "composer audit"
+        "phpcs": "vendor/bin/phpcs --standard=phpcs.ruleset.xml src/",
+        "phpstan": "vendor/bin/phpstan analyse --configuration=phpstan.neon --debug --memory-limit=512M"
     },
     "extra": {
         "phpcodesniffer": {

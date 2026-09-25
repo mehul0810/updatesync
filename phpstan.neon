@@ -1,0 +1,10 @@
+parameters:
+    level: max
+    paths:
+        - src
+    scanFiles:
+        - vendor/php-stubs/wordpress-stubs/wordpress-stubs.php
+    bootstrapFiles:
+        - phpstan-bootstrap.php
+    typeAliases:
+        UpdateSyncRelease: 'object{tag_name: string, published_at?: string, body?: string, assets?: array<int, \stdClass>}'

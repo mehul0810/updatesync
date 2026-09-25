@@ -1,52 +1,61 @@
 # UpdateSync
 
-**UpdateSync** is a composer package to help developers to integrate within their WordPress plugin to simplify their automatic updates directly from their code hosting providers repository.
+UpdateSync is a Composer package that adds GitHub release updates for a WordPress plugin. It uses WordPress's plugin update and plugin information hooks.
 
-## Overview
+## Requirements
 
-UpdateSync is a modular composer package that helps developers to integrate automatic updates to their WordPress plugins and themes from various code hosting providers. Currently, it supports both GitHub and GitLab. Users can choose the provider they want to use, and additional providers can be integrated in the future.
-
-## Features
-
-- **Modular Architecture:** Common interface and abstract provider for shared functionality.
-- **Multiple Provider Support:** Separate implementations for GitHub and GitLab.
-- **Optimized Performance:** Caches API responses using WordPress transients.
-- **WordPress Integration:** Hooks into WordPress update system.
-- **PHP 8.1 Compatible:** Utilizes modern PHP practices.
-- **PSR-4 Autoloading:** Easily integrated via Composer.
+- PHP 8.1 or later
+- A WordPress plugin in its own directory, with a version in its main plugin header
+- A GitHub repository with published releases
+- A ZIP release asset containing the plugin
 
 ## Installation
 
-1. Install via Composer:
-    ```bash
-    composer require mehul0810/updatesync
-    ```
-2. Include the Composer autoloader in your WordPress project:
-    ```php
-    require_once __DIR__ . '/vendor/autoload.php';
-    ```
-3. Instantiate the provider using the factory:
-    ```php
-    use MG\UpdateSync\ProviderFactory;
+Install the package in the WordPress project that contains your plugin:
 
-    // To use GitHub update notifications:
-    $provider = ProviderFactory::create('github', __FILE__);
+```bash
+composer require mehul0810/updatesync
+```
 
-    // To use GitLab update notifications:
-    $provider = ProviderFactory::create('gitlab', __FILE__);
+Load the Composer autoloader and create an updater in the plugin's main PHP file:
 
-    // Run the provided. Always use only one provider at a time.
-    $provider->run();
-    ```
+```php
+use UpdateSync\Updater;
 
-## Contributing
+require_once __DIR__ . '/vendor/autoload.php';
 
-Contributions are welcome! Please follow these guidelines:
-- Fork the repository and create a new branch for your feature or bug fix.
-- Adhere to [WordPress Coding Standards](https://make.wordpress.org/core/handbook/best-practices/coding-standards/) (WPCS/PHPCS).
-- Write clear, descriptive commit messages and update documentation as needed.
-- Submit a pull request with your changes.
+new Updater(
+	[
+		'file'       => __FILE__,
+		'slug'       => 'my-plugin',
+		'version'    => '1.0.0',
+		'github'     => [
+			'username'     => 'github-owner',
+			'repository'   => 'my-plugin',
+			'access_token' => '', // Leave empty for public repositories.
+		],
+		'can_update' => true,
+	]
+);
+```
+
+Keep `version` in sync with the plugin header. The updater reads the latest published GitHub release and compares its tag with this version. When `can_update` is enabled, it uses a ZIP release asset to provide the update package. The asset name must end in `.zip`, and its archive must contain the plugin files at the root of the extracted directory. UpdateSync renames that directory to the installed plugin folder before WordPress installs it. `can_update` defaults to `false`; set it to `true` to offer updates.
+
+For a private repository, provide a GitHub token with access to the repository. Store it in server configuration or another secret store; do not commit it in the plugin source. UpdateSync sends that token only to the matching GitHub release asset API endpoint. The archive is downloaded by WordPress and is not copied into the site's public uploads directory.
+
+## Development
+
+Install the development tools and run the configured checks:
+
+```bash
+composer install
+composer run phpcs
+composer run phpstan
+composer audit
+```
+
+The development dependencies are not required at runtime.
 
 ## License
 
-This project is licensed under the GPLv3. See the [LICENSE](LICENSE) file for details.
+GPL-3.0-or-later. See [LICENSE](LICENSE).
